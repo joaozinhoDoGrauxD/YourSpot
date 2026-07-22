@@ -6,38 +6,73 @@ if (Platform.OS !== "web") {
   WebViewComponent = require("react-native-webview").WebView;
 }
 
+export interface Spot {
+  id: number | string;
+  title?: string;
+  description?: string;
+  latitude?: number;
+  longitude?: number;
+  lat?: number;
+  lng?: number;
+  image?: string;
+  imageUrl?: string;
+}
+
 interface LeafletMapProps {
   latitude: number;
   longitude: number;
   onLocationChanged: (latitude: number, longitude: number) => void;
+  spots?: Spot[];
+  onSpotSelect?: (spot: Spot) => void;
 }
 
-export default function LeafletMap({ latitude, longitude, onLocationChanged }: LeafletMapProps) {
+export default function LeafletMap({
+  latitude,
+  longitude,
+  onLocationChanged,
+  spots = [],
+  onSpotSelect,
+}: LeafletMapProps) {
   const webViewRef = useRef<any>(null);
+
+  // Filtra apenas os spots que possuem coordenadas válidas e DIFERENTES de (0, 0)
+  const validSpots = spots.filter((spot) => {
+    const lat = Number(spot.latitude ?? spot.lat);
+    const lng = Number(spot.longitude ?? spot.lng);
+    return (
+      !isNaN(lat) &&
+      !isNaN(lng) &&
+      lat !== 0 &&
+      lng !== 0
+    );
+  });
 
   const handleMapMessage = (event: { nativeEvent: { data: string } }) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === "LOCATION_CHANGED") {
         onLocationChanged(data.latitude, data.longitude);
+      } else if (data.type === "SPOT_SELECTED" && onSpotSelect) {
+        onSpotSelect(data.spot);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Erro ao ler mensagem do mapa", e);
+    }
   };
 
-  if (Platform.OS === "web") {
-    return (
-      <View className="absolute inset-0 w-full h-full">
-        <iframe
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-          src={`https://maps.google.com/maps?q=${latitude},${longitude}&z=15&output=embed`}
-        />
-      </View>
-    );
-  }
+  // Prepara o JSON seguro dos spots para injetar no JavaScript do Leaflet
+  const spotsJson = JSON.stringify(
+    validSpots.map((spot) => ({
+      id: spot.id,
+      title: spot.title || "Sem Título",
+      description: spot.description || "",
+      lat: Number(spot.latitude ?? spot.lat),
+      lng: Number(spot.longitude ?? spot.lng),
+      image: spot.image || spot.imageUrl || "",
+    }))
+  );
 
-  const mapMobileHTML = `
+  const mapHTML = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -59,6 +94,14 @@ export default function LeafletMap({ latitude, longitude, onLocationChanged }: L
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: transparent !important;
         }
         .leaflet-control-geocoder-icon { display: none !important; }
+
+        .spot-popup {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          max-width: 200px;
+        }
+        .spot-popup h4 { margin: 0 0 4px 0; font-size: 13px; font-weight: bold; color: #18181b; }
+        .spot-popup p { margin: 0; font-size: 11px; color: #71717a; }
+        .spot-popup img { width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-bottom: 6px; }
       </style>
     </head>
     <body>
@@ -68,20 +111,77 @@ export default function LeafletMap({ latitude, longitude, onLocationChanged }: L
       <script>
         var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${latitude}, ${longitude}], 15);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        var marker = L.marker([${latitude}, ${longitude}]).addTo(map);
 
+        // Marcador da posição atual/selecionada
+        var currentMarker = L.marker([${latitude}, ${longitude}]).addTo(map);
+
+        // Marcadores customizados para os spots recebidos
+        var spotsData = ${spotsJson};
+
+        var spotIcon = L.divIcon({
+          className: 'custom-spot-marker',
+          html: '<div style="background-color: #dc2626; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        spotsData.forEach(function(spot) {
+          if (spot.lat && spot.lng) {
+            var spotMarker = L.marker([spot.lat, spot.lng], { icon: spotIcon }).addTo(map);
+            
+            var popupHtml = '<div class="spot-popup">';
+            if (spot.image) {
+              popupHtml += '<img src="' + spot.image + '" alt="' + spot.title + '" />';
+            }
+            popupHtml += '<h4>' + spot.title + '</h4>';
+            if (spot.description) {
+              popupHtml += '<p>' + spot.description + '</p>';
+            }
+            popupHtml += '</div>';
+
+            spotMarker.bindPopup(popupHtml);
+
+            spotMarker.on('click', function() {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'SPOT_SELECTED',
+                  spot: spot
+                }));
+              }
+            });
+          }
+        });
+
+        // Campo de busca
         L.Control.geocoder({
           defaultMarkGeocode: false,
           placeholder: "📍 Buscar localização...",
           collapsed: false
         }).on('markgeocode', function(e) {
-          var center = e.geocode.center; map.flyTo(center, 16, { animate: true, duration: 1.5 }); marker.setLatLng(center);
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOCATION_CHANGED', latitude: center.lat, longitude: center.lng }));
+          var center = e.geocode.center; 
+          map.flyTo(center, 16, { animate: true, duration: 1.5 }); 
+          currentMarker.setLatLng(center);
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'LOCATION_CHANGED', latitude: center.lat, longitude: center.lng }));
+          }
         }).addTo(map);
       </script>
     </body>
     </html>
   `;
+
+  if (Platform.OS === "web") {
+    return (
+      <View className="absolute inset-0 w-full h-full">
+        <iframe
+          width="100%"
+          height="100%"
+          style={{ border: 0 }}
+          srcDoc={mapHTML}
+        />
+      </View>
+    );
+  }
 
   return (
     <View className="absolute inset-0 w-full h-full">
@@ -89,7 +189,7 @@ export default function LeafletMap({ latitude, longitude, onLocationChanged }: L
         <WebViewComponent
           ref={webViewRef}
           originWhitelist={['*']}
-          source={{ html: mapMobileHTML }}
+          source={{ html: mapHTML }}
           className="flex-1"
           domStorageEnabled={true}
           javaScriptEnabled={true}
