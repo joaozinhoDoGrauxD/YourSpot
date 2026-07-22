@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   ScrollView,
   Image,
   ActivityIndicator,
   TouchableOpacity,
+  RefreshControl,
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Heading } from "@/components/ui/heading";
 import { Text } from "@/components/ui/text";
 import { Card } from "@/components/ui/card";
@@ -18,6 +19,9 @@ import { Buffer } from "buffer";
 import nestApi from "@/services/apis/nest/nest";
 import { useSpots } from "@/hooks/useSpots";
 import EditSpotModal from "@/components/custom/EditSpotModal";
+import CreateSpotModal from "@/components/custom/CreateSpotModal";
+import CreateContactModal from "@/components/custom/CreateContactModal";
+import FloatingMenu from "@/components/custom/FloatingMenu";
 
 async function getImageUrl(spotId: number): Promise<string | null> {
   const token = (await getSession()) || "";
@@ -68,7 +72,7 @@ function SpotItemWithImage({
         ) : imageUri ? (
           <Image source={{ uri: imageUri }} className="w-20 h-20 mr-3 rounded-xl" />
         ) : (
-          <View className="w-20 h-20 mr-3 rounded-xl bg-[#E5E5DE] justify-center items-center">
+          <View className="w-20 h-20 mr-3 rounded-xl bg-[#E5EDE] justify-center items-center">
             <Text className="text-[#666] text-[10px]">Sem foto</Text>
           </View>
         )}
@@ -93,9 +97,32 @@ export default function MyReportsScreen() {
   const router = useRouter();
   const { spots, loading, error, fetchSpots, updateSpot, deleteSpot } = useSpots();
   const [selectedSpot, setSelectedSpot] = useState<any | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+
+  const [showCreateSpotModal, setShowCreateSpotModal] = useState(false);
+  const [showCreateContactModal, setShowCreateContactModal] = useState(false);
 
   useEffect(() => {
     fetchSpots();
+  }, [fetchSpots]);
+
+  useFocusEffect(
+    useCallback(() => {
+
+      fetchSpots();
+    }, [fetchSpots])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchSpots();
+    } catch (err) {
+      console.warn("Erro ao atualizar spots:", err);
+    } finally {
+      setRefreshing(false);
+    }
   }, [fetchSpots]);
 
   return (
@@ -114,7 +141,10 @@ export default function MyReportsScreen() {
         Meus Spots
       </Heading>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {loading && <ActivityIndicator size="large" color="#000" className="mt-6" />}
         {error && <Text className="text-red-500">{error}</Text>}
 
@@ -127,6 +157,61 @@ export default function MyReportsScreen() {
         ))}
       </ScrollView>
 
+      {/* Floating menu (Create Spot / Create Contact) */}
+      <FloatingMenu
+        onOpenSpotModal={() => setShowCreateSpotModal(true)}
+        onOpenContactModal={() => setShowCreateContactModal(true)}
+      />
+
+      {/* Create Spot Modal */}
+      <CreateSpotModal
+        showModal={showCreateSpotModal}
+        setShowModal={(v: boolean) => {
+          setShowCreateSpotModal(v);
+          if (!v) {
+
+            fetchSpots();
+          }
+        }}
+        addSpot={async (payload: any) => {
+          try {
+            await fetchSpots(); 
+            const newSpot = await (async () => {
+              const token = (await getSession()) || "";
+              const res = await nestApi.post("/spots", payload, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              return res.data;
+            })();
+            await fetchSpots();
+            return newSpot;
+          } catch (err) {
+            console.warn("Erro ao criar spot:", err);
+            throw err;
+          }
+        }}
+      />
+
+      {/* Create Contact Modal */}
+      <CreateContactModal
+        showModal={showCreateContactModal}
+        setShowModal={(v: boolean) => {
+          setShowCreateContactModal(v);
+        }}
+        addContact={async (payload: any) => {
+          try {
+            const token = (await getSession()) || "";
+            const res = await nestApi.post("/contacts", payload, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            return res.data;
+          } catch (err: any) {
+            console.warn("Erro ao criar contato:", err);
+            throw err;
+          }
+        }}
+      />
+
       {/* Edit Spot Modal */}
       <EditSpotModal
         selectedSpot={selectedSpot}
@@ -134,6 +219,8 @@ export default function MyReportsScreen() {
         updateSpot={async (payload: any) => {
           try {
             await updateSpot(payload);
+            // after update, refresh list
+            await fetchSpots();
           } catch (err) {
             console.warn("Erro ao atualizar spot:", err);
             throw err;
@@ -142,6 +229,8 @@ export default function MyReportsScreen() {
         deleteSpot={async (id: number) => {
           try {
             await deleteSpot(id);
+            // after delete, refresh list
+            await fetchSpots();
           } catch (err) {
             console.warn("Erro ao deletar spot:", err);
             throw err;

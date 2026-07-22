@@ -2,11 +2,6 @@ import { Home, Settings, Info, UserRound, FileText } from "lucide-react-native";
 
 export const tabsConstants = [
   {
-    name: "index",
-    title: "Home",
-    component: Home,
-  },
-  {
     name: "my-reports",
     title: "Meus Spots",
     component: FileText, // ícone de exemplo
