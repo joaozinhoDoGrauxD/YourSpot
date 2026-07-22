@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Card } from "@/components/ui/card";
@@ -7,10 +7,42 @@ import { Heading } from "@/components/ui/heading";
 import { Icon, InfoIcon } from "@/components/ui/icon";
 import { LogOut } from "lucide-react-native";
 import { useSession } from "@/services/auth/session";
+import { getSessionExpiry } from "@/services/auth/session";
+
+function formatRemaining(ms: number) {
+  if (ms <= 0) return "00:00:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
   const { signOut, session } = useSession();
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    let interval: number | undefined;
+
+    async function updateRemaining() {
+      const expiryTs = await getSessionExpiry();
+      if (!expiryTs) {
+        setRemainingMs(null);
+        return;
+      }
+      const msLeft = expiryTs - Date.now();
+      setRemainingMs(msLeft);
+    }
+
+    updateRemaining();
+    interval = setInterval(updateRemaining, 1000) as unknown as number;
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [session]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -22,7 +54,7 @@ export default function SettingsPage() {
       {/* BOTÃO VOLTAR */}
       <TouchableOpacity
         activeOpacity={0.7}
-        onPress={() => router.canGoBack() ? router.back() : router.replace("/(drawer)/(tabs)")}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace("/(drawer)/(tabs)"))}
         className="mb-8 p-2 -ml-2 self-start"
       >
         <Text className="text-[#1C1C1E] font-medium text-base">← Voltar</Text>
@@ -39,7 +71,7 @@ export default function SettingsPage() {
           GERAL
         </Text>
 
-        {/* BOTÃO DO ABOUT ENCAPSULADO */}
+        {/* BOTÃO DO ABOUT */}
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => router.push("/about")}
@@ -58,9 +90,7 @@ export default function SettingsPage() {
             </Text>
           </View>
 
-          <Text className="text-[#9A9A9A] font-bold text-sm mr-1">
-            →
-          </Text>
+          <Text className="text-[#9A9A9A] font-bold text-sm mr-1">→</Text>
         </TouchableOpacity>
 
         {/* BOTÃO LOGOUT */}
@@ -92,10 +122,17 @@ export default function SettingsPage() {
           <Text className="text-[#4A4A4A] font-mono text-xs px-1">
             Token: {session.substring(0, 20)}...
           </Text>
+
+          <View className="mt-3">
+            <Text className="text-[#666666] text-xs px-1">Tempo restante até expirar</Text>
+            <Text className="text-[#1C1C1E] font-semibold text-lg mt-1">
+              {remainingMs === null ? "Indisponível" : remainingMs <= 0 ? "Expirado" : formatRemaining(remainingMs)}
+            </Text>
+          </View>
         </Card>
       )}
 
-      {/* TEXTO DE RODAPÉ */}
+      {/* RODAPÉ */}
       <Text className="text-[#9A9A9A] text-center mt-4" size="xs">
         YourSpot App • Versão 1.0.0
       </Text>

@@ -1,263 +1,202 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Image,
-  ActivityIndicator
-} from "react-native";
+import React, { useState } from "react";
+import { View, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image } from "react-native";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { Heading } from "@/components/ui/heading";
 import { Text } from "@/components/ui/text";
+import { Card } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { Check, ArrowLeft, RefreshCw, Send, MapPin } from "lucide-react-native";
-import * as ImagePicker from "expo-image-picker";
-import * as Location from "expo-location";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AlertCircle, MapPin, FileText, Camera, Trash2 } from "lucide-react-native";
+import { useSpots } from "@/hooks/useSpots";
+import { useLocation } from "@/src/hooks/useLocation";
 
-export default function ReportPage() {
+export default function ReportScreen() {
   const router = useRouter();
+  const { addSpot } = useSpots();
+  const { region } = useLocation();
 
-  const problemsList = [
-    "Buraco na via",
-    "Lixo / Entulho acumulado",
-    "Iluminação pública queimada",
-    "Vazamento de água / esgoto",
-    "Mato alto / Terreno abandonado",
-    "Sinalização danificada",
-    "Árvore com risco de queda"
-  ];
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const [allowMultiple, setAllowMultiple] = useState(false);
-  const [selectedProblems, setSelectedProblems] = useState<string[]>([]);
-  const [observation, setObservation] = useState("");
-
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [address, setAddress] = useState<string>("Buscando endereço...");
-  const [loadingLocation, setLoadingLocation] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    async function getAddressFromGPS() {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          setAddress("Localização não autorizada");
-          setLoadingLocation(false);
-          return;
-        }
-
-        let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        let reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude
-        });
-
-        if (reverseGeocode.length > 0) {
-          const item = reverseGeocode[0];
-          const formattedAddress = `${item.street || "Rua não identificada"}, ${item.streetNumber || "S/N"} - ${item.subregion || item.city || "Cidade"}`;
-          setAddress(formattedAddress);
-        } else {
-          setAddress("Endereço não encontrado");
-        }
-      } catch (error) {
-        setAddress("Erro ao obter endereço do GPS");
-      } finally {
-        setLoadingLocation(false);
-      }
-    }
-
-    getAddressFromGPS();
-  }, []);
-
-  const toggleAllowMultiple = () => {
-    setAllowMultiple(!allowMultiple);
-    setSelectedProblems([]);
-  };
-
-  const handleSelectProblem = (problem: string) => {
-    if (allowMultiple) {
-      if (selectedProblems.includes(problem)) {
-        setSelectedProblems(selectedProblems.filter((p) => p !== problem));
-      } else {
-        setSelectedProblems([...selectedProblems, problem]);
-      }
-    } else {
-      setSelectedProblems([problem]);
-    }
-  };
-
-  const handleTakePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      alert("Permissão para usar a câmera é necessária!");
+  const handlePickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (!permissionResult.granted) {
+      Alert.alert("Permissão negada", "Precisamos de permissão para acessar sua galeria.");
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
+      aspect: [4, 3],
       quality: 0.8,
+      base64: true,
     });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setCapturedImage(result.assets[0].uri);
+    if (!result.canceled && result.assets && result.assets[0].base64) {
+      setImageBase64(result.assets[0].base64);
     }
   };
 
-  const handleSaveReport = async () => {
-    if (selectedProblems.length === 0 || !capturedImage) return;
+  const handleSubmit = async () => {
+    if (!title.trim() || !description.trim()) {
+      Alert.alert("Atenção", "Preencha o título e a descrição da ocorrência.");
+      return;
+    }
 
-    setIsSubmitting(true);
     try {
-      const newReport = {
-        id: Date.now().toString(),
-        problems: selectedProblems,
-        address,
-        observation,
-        image: capturedImage,
-        date: new Date().toLocaleDateString("pt-BR")
-      };
+      setLoading(true);
+      await addSpot({
+        title,
+        description,
+        location: locationName.trim() || "Localização informada",
+        latitude: region?.latitude || -15.7801,
+        longitude: region?.longitude || -47.9292,
+        imageBase64: imageBase64 ? `data:image/jpeg;base64,${imageBase64}` : undefined,
+      });
 
-      const existingData = await AsyncStorage.getItem("@user_reports");
-      const reports = existingData ? JSON.parse(existingData) : [];
-      reports.unshift(newReport);
-
-      await AsyncStorage.setItem("@user_reports", JSON.stringify(reports));
-
-      alert("Denúncia registrada com sucesso!");
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace("/(drawer)/(tabs)");
-      }
-    } catch (error) {
-      alert("Erro ao salvar denúncia.");
+      Alert.alert("Sucesso", "Ocorrência registrada com sucesso!");
+      router.back();
+    } catch (err: any) {
+      Alert.alert("Erro", err.message || "Não foi possível registrar a ocorrência.");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 bg-[#F9F9F6] pt-12">
-      {/* CABEÇALHO */}
-      <View className="px-6 mb-4">
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.canGoBack() ? router.back() : router.replace("/(drawer)/(tabs)")} className="flex-row items-center mb-3 self-start">
-          <Icon as={ArrowLeft} size="md" className="text-zinc-900" />
-          <Text className="text-zinc-900 font-semibold ml-1.5">Voltar</Text>
-        </TouchableOpacity>
-        <Heading size="xl" className="text-zinc-900 font-bold">Reportar Problema</Heading>
-      </View>
+    <View className="flex-1 bg-[#F9F9F6] p-6 pt-12">
+      {/* BOTÃO VOLTAR */}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace("/(drawer)/(tabs)"))}
+        className="mb-6 p-2 -ml-2 self-start"
+      >
+        <Text className="text-[#1C1C1E] font-medium text-base">← Voltar</Text>
+      </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+      {/* TÍTULO DA TELA */}
+      <Heading className="text-[#1C1C1E] font-bold mb-6" size="2xl">
+        Nova Ocorrência
+      </Heading>
 
-        {/* CARD DE ENDEREÇO */}
-        <View className="mx-6 p-3.5 bg-white rounded-2xl border border-zinc-200/50 flex-row items-center mb-4">
-          <Icon as={MapPin} size="sm" className="text-red-600 mr-2" />
-          <View className="flex-1">
-            <Text className="text-[11px] font-bold text-zinc-500 uppercase">Local da Ocorrência</Text>
-            {loadingLocation ? (
-              <ActivityIndicator size="small" color="#1C1C1E" className="self-start mt-1" />
-            ) : (
-              <Text className="text-[13px] font-semibold text-zinc-900 mt-0.5">{address}</Text>
-            )}
-          </View>
-        </View>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {/* CARD DO FORMULÁRIO */}
+        <Card className="w-full p-5 rounded-[24px] bg-white border border-[#E5E5DE] shadow-sm mb-4">
+          <Text className="text-[#666666] font-medium mb-4 px-1" size="xs">
+            DETALHES DO PROBLEMA
+          </Text>
 
-        {/* SE JÁ TIVER FOTO: MOSTRA A PRÉ-VISUALIZAÇÃO */}
-        {capturedImage ? (
-          <View className="px-6">
-            <Text className="text-[13px] font-bold text-zinc-900 mb-2">Foto Capturada</Text>
-            <Image source={{ uri: capturedImage }} className="w-full h-[260px] rounded-2xl bg-zinc-200" style={{ resizeMode: "cover" }} />
-
-            <View className="flex-row justify-end mt-2">
-              <TouchableOpacity activeOpacity={0.8} onPress={handleTakePhoto} className="flex-row items-center py-2 px-3 bg-zinc-200 rounded-lg">
-                <Icon as={RefreshCw} size="sm" className="text-zinc-900 mr-1.5" />
-                <Text className="text-xs font-semibold text-zinc-900">Tirar Outra</Text>
-              </TouchableOpacity>
+          {/* CAMPO TÍTULO */}
+          <View className="mb-4">
+            <View className="flex-row items-center mb-1.5 px-1">
+              <Icon color="#1C1C1E" as={AlertCircle} size="sm" />
+              <Text className="font-semibold text-[#1C1C1E] ml-2" size="sm">
+                Título da Ocorrência *
+              </Text>
             </View>
-
-            {/* CAMPO DE OBSERVAÇÃO OPCIONAL */}
-            <Text className="text-[13px] font-bold text-zinc-900 mb-2 mt-4">Observações (Opcional)</Text>
             <TextInput
-              className="bg-white border border-zinc-200/50 rounded-xl p-3 h-20 text-sm text-zinc-900"
-              style={{ textAlignVertical: "top" }}
-              placeholder="Ex: Próximo à padaria, poste piscando..."
-              placeholderTextColor="#999"
-              multiline
-              value={observation}
-              onChangeText={setObservation}
+              className="bg-[#F4F4F0] border border-[#E5E5DE] p-4 rounded-[16px] text-[#1C1C1E] text-sm"
+              placeholder="Ex: Buraco profundo na via"
+              placeholderTextColor="#9A9A9A"
+              value={title}
+              onChangeText={setTitle}
             />
           </View>
-        ) : (
-          <>
-            {/* CARD DA PERGUNTA */}
-            <View className="mx-6 p-4 bg-white rounded-2xl border border-zinc-200/50 flex-row justify-between items-center mb-4">
-              <Text className="text-sm font-bold text-zinc-900">Qual é o problema?</Text>
-              <TouchableOpacity activeOpacity={0.8} onPress={toggleAllowMultiple} className="flex-row items-center bg-[#F4F4F0] px-2.5 py-1.5 rounded-lg">
-                <View className={`w-[18px] h-[18px] rounded border border-zinc-900 justify-center items-center mr-1.5 ${allowMultiple ? 'bg-zinc-900' : ''}`}>
-                  {allowMultiple && <Icon as={Check} size="xs" className="text-white" />}
-                </View>
-                <Text className="text-[12px] font-semibold text-zinc-900">Mais de um?</Text>
-              </TouchableOpacity>
+
+          {/* CAMPO LOCALIZAÇÃO / ENDEREÇO */}
+          <View className="mb-4">
+            <View className="flex-row items-center mb-1.5 px-1">
+              <Icon color="#1C1C1E" as={MapPin} size="sm" />
+              <Text className="font-semibold text-[#1C1C1E] ml-2" size="sm">
+                Local / Referência
+              </Text>
+            </View>
+            <TextInput
+              className="bg-[#F4F4F0] border border-[#E5E5DE] p-4 rounded-[16px] text-[#1C1C1E] text-sm"
+              placeholder="Ex: Próximo à praça central"
+              placeholderTextColor="#9A9A9A"
+              value={locationName}
+              onChangeText={setLocationName}
+            />
+          </View>
+
+          {/* CAMPO UPLOAD DE IMAGEM */}
+          <View className="mb-4">
+            <View className="flex-row items-center mb-1.5 px-1">
+              <Icon color="#1C1C1E" as={Camera} size="sm" />
+              <Text className="font-semibold text-[#1C1C1E] ml-2" size="sm">
+                Foto do Problema
+              </Text>
             </View>
 
-            {/* LISTA DE OPÇÕES */}
-            <View className="px-6 flex-row flex-wrap gap-2">
-              {problemsList.map((problem) => {
-                const isSelected = selectedProblems.includes(problem);
-                return (
-                  <TouchableOpacity
-                    key={problem}
-                    activeOpacity={0.85}
-                    onPress={() => handleSelectProblem(problem)}
-                    className={`py-3 px-4 rounded-3xl bg-white border border-zinc-200/50 mb-1 ${isSelected ? 'bg-zinc-900 border-zinc-900' : ''}`}
-                  >
-                    <Text className={`text-[13px] font-semibold text-zinc-900 ${isSelected ? 'text-white' : ''}`}>
-                      {problem}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
-      </ScrollView>
-
-      {/* RODAPÉ FIXO */}
-      <View className="absolute bottom-0 left-0 right-0 pb-8 pt-4 px-6 bg-[#F9F9F6]/95 items-center border-t border-zinc-200/50">
-        {!capturedImage ? (
-          <>
-            <Text className="text-xs text-zinc-500 mb-3 font-medium">
-              {selectedProblems.length === 0 ? "Selecione ao menos um problema para tirar a foto" : `${selectedProblems.length} problema(s) selecionado(s)`}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={selectedProblems.length === 0}
-              onPress={handleTakePhoto}
-              className={`w-[72px] h-[72px] rounded-full border-4 border-zinc-900 justify-center items-center bg-white ${selectedProblems.length === 0 ? 'opacity-40' : ''}`}
-            >
-              <View className="w-[54px] h-[54px] rounded-full bg-red-600" />
-            </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            disabled={isSubmitting}
-            onPress={handleSaveReport}
-            className="w-full bg-zinc-900 py-3.5 rounded-2xl flex-row justify-center items-center active:bg-zinc-800"
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFF" />
+            {imageBase64 ? (
+              <View className="relative mt-2 rounded-[16px] overflow-hidden border border-[#E5E5DE]">
+                <Image
+                  source={{ uri: `data:image/jpeg;base64,${imageBase64}` }}
+                  className="w-full h-48 rounded-[16px]"
+                  resizeMode="cover"
+                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => setImageBase64(null)}
+                  className="absolute top-3 right-3 bg-red-500 p-2 rounded-full shadow-md flex-row items-center justify-center"
+                >
+                  <Icon color="#ffffff" as={Trash2} size="sm" />
+                </TouchableOpacity>
+              </View>
             ) : (
-              <>
-                <Icon as={Send} size="sm" className="text-white mr-2" />
-                <Text className="text-white text-sm font-bold">Enviar Denúncia</Text>
-              </>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handlePickImage}
+                className="bg-[#F4F4F0] border border-dashed border-[#CCCCCC] p-6 rounded-[16px] items-center justify-center mt-1"
+              >
+                <Icon color="#666666" as={Camera} size="lg" />
+                <Text className="text-[#666666] font-medium text-xs mt-2">
+                  Toque para selecionar uma foto da galeria
+                </Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
-        )}
-      </View>
+          </View>
+
+          {/* CAMPO DESCRIÇÃO */}
+          <View className="mb-2">
+            <View className="flex-row items-center mb-1.5 px-1">
+              <Icon color="#1C1C1E" as={FileText} size="sm" />
+              <Text className="font-semibold text-[#1C1C1E] ml-2" size="sm">
+                Descrição Detalhada *
+              </Text>
+            </View>
+            <TextInput
+              className="bg-[#F4F4F0] border border-[#E5E5DE] p-4 rounded-[16px] text-[#1C1C1E] text-sm h-32"
+              placeholder="Descreva o problema com mais detalhes para facilitar a verificação..."
+              placeholderTextColor="#9A9A9A"
+              multiline
+              textAlignVertical="top"
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
+        </Card>
+
+        {/* BOTÃO DE ENVIO */}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          className="bg-[#1C1C1E] p-4 rounded-[20px] items-center justify-center flex-row shadow-sm mt-2"
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-white font-bold text-base">Enviar Denúncia</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
