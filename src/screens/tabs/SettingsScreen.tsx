@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/text";
 import { Heading } from "@/components/ui/heading";
 import { Icon, InfoIcon } from "@/components/ui/icon";
 import { LogOut } from "lucide-react-native";
+import Copyright from "@/src/components/custom/auth/Copyright";
 import { useSession, getSessionExpiry } from "@/services/auth/session";
 
 export default function SettingsScreen() {
@@ -134,10 +135,8 @@ export default function SettingsScreen() {
         </Card>
       )}
 
-      {/* TEXTO DE RODAPÉ */}
-      <Text className="text-[#9A9A9A] text-center mt-4" size="xs">
-        YourSpot App • Versão 1.0.0
-      </Text>
-    </View>
+     <Copyright/> 
+
+     </View>
   );
 }

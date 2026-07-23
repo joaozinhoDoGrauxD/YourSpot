@@ -1,24 +1,36 @@
-import { Home, Settings, Info, UserRound } from "lucide-react-native";
-
+import { MapPin, Info, LogOut, UserRound, Settings } from "lucide-react-native";
+        
 export const tabsConstants = [
-    {
-      name: "index",
-      title: "Home",
-      component: Home 
-    },
-    {
-      name: "contacts",
-      title: "Contatos",
-      component: UserRound 
-    },
-    {
-      name: "settings",
-      title: "Settings",
-      component: Settings
-    },
-    {
-      name: "about",
-      title: "About",
-      component: Info
-    }
+  {
+    name: "📍 Meus Locais",
+    route: "MyReports",
+    text: "Meus Locais",
+    icon: MapPin,
+    close: false,
+
+  },
+  {
+    name: "👥 Contatos",
+    route: "Contacts",
+    text: "Meus Contatos",
+    icon: UserRound,
+    close: false,
+  },
+  {
+    name: "📍 Sobre o App",
+    route: "About",
+    text: "Sobre o App",
+    icon: Info,
+    close: false,
+
+  },
+  {
+    text: "Meus Locais",
+    icon: LogOut,
+    close: true,
+  }
+
+
+
+
 ]

@@ -16,5 +16,5 @@
     "global.d.ts",
     "declarations.d.ts",
     "nativewind-env.d.ts"
-  ]
+, "src/types/HomeButton.ts"  ]
 }

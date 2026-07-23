@@ -106,16 +106,7 @@ export default function OcorrenciasPanel({
             ))}
           </ScrollView>
 
-          <View className="items-center mt-2.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full border-zinc-950 rounded-xl bg-white/80 border-1.5 h-10 active:bg-zinc-100"
-              onPress={onNewDenuncia}
-            >
-              <ButtonText className="text-zinc-900 font-bold text-xs">+ Nova Denúncia</ButtonText>
-            </Button>
-          </View>
+          
         </BlurView>
       </Animated.View>
     </GestureDetector>

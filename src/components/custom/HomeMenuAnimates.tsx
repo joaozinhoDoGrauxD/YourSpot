@@ -1,20 +1,14 @@
 import React, { memo, useEffect, useState } from "react";
-import { View, TouchableOpacity } from "react-native";
+import { View } from "react-native";
 import Animated, { useSharedValue, withTiming, Easing, useAnimatedStyle, runOnJS } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
-import { Text } from "@/components/ui/text";
-import { Icon } from "@/components/ui/icon";
-import { MapPin, Info, LogOut, UserRound, Settings } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { tabsConstants } from "@/src/constants/RouterLayouts";
+import { HomeMenuAnimatedProps } from "@/src/types/HomeButton.types";
+import HomeButton from "./HomeButtons";
 const iosSmoothCurve = Easing.bezier(0.16, 1, 0.3, 1);
 
-interface HomeMenuAnimatedProps {
-  visible: boolean;
-  onClose: () => void;
-  onSignOut: () => void;
-  onNavigate: (route: string) => void;
-}
+
 
 const HomeMenuAnimated = memo(({
   visible,
@@ -40,10 +34,13 @@ const HomeMenuAnimated = memo(({
     }
   }, [visible]);
 
-  const handleOptionPress = (_optionName: string, route: string) => {
-    onClose();
-    setTimeout(() => onNavigate(route), 100);
-  };
+const handleOptionPress = (_optionName?: string, route?: string) => {
+        onClose();
+        if (route) {
+          setTimeout(() => onNavigate(route), 100);
+        }
+    };
+
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -53,76 +50,26 @@ const HomeMenuAnimated = memo(({
 
   if (!isRendering) return null;
 
+  const MyOut = () => {
+      onClose()
+      onSignOut()
+  }
+
   return (
     <Animated.View
       style={[animatedStyle, { bottom: 95 + insets.bottom }]}
       className="absolute w-[220px] align-center items-center z-50 self-center"
     >
-      <BlurView intensity={80} tint="light" className="w-full rounded-2xl border-1.5 border-white/70 shadow-lg overflow-hidden bg-white/75">
+      <BlurView intensity={100} tint="light" className="w-full rounded-2xl border-1.5 border-white/70 shadow-lg overflow-hidden bg-white/75">
 
-        {/* MEUS LOCAIS */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          className="py-3 px-5 w-full flex-row items-center justify-start"
-          onPress={() => handleOptionPress('📍 Meus Locais', "MyReports")}
-        >
-          <Icon as={MapPin} size="md" className="text-zinc-900 mr-3" />
-          <Text className="text-[15px] font-semibold text-zinc-900 tracking-tight">Meus Locais</Text>
-        </TouchableOpacity>
+        {tabsConstants.map((tabs, index) => (
+          <HomeButton key={index} text={tabs.text} close={tabs.close} name={tabs.name} icon={tabs.icon} route={tabs.route} func={!tabs.close ? handleOptionPress : MyOut }/>
+        )
+        )}
 
-        <View className="h-[1px] bg-black/10 mx-3" />
-
-        {/* CONTATOS */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          className="py-3 px-5 w-full flex-row items-center justify-start"
-          onPress={() => handleOptionPress('👥 Contatos', "Contacts")}
-        >
-          <Icon as={UserRound} size="md" className="text-zinc-900 mr-3" />
-          <Text className="text-[15px] font-semibold text-zinc-900 tracking-tight">Contatos</Text>
-        </TouchableOpacity>
-
-        <View className="h-[1px] bg-black/10 mx-3" />
-
-        {/* CONFIGURAÇÕES */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          className="py-3 px-5 w-full flex-row items-center justify-start"
-          onPress={() => handleOptionPress('⚙️ Configurações', "Settings")}
-        >
-          <Icon as={Settings} size="md" className="text-zinc-900 mr-3" />
-          <Text className="text-[15px] font-semibold text-zinc-900 tracking-tight">Configurações</Text>
-        </TouchableOpacity>
-
-        <View className="h-[1px] bg-black/10 mx-3" />
-
-        {/* SOBRE O APP */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          className="py-3 px-5 w-full flex-row items-center justify-start"
-          onPress={() => handleOptionPress('ℹ️ Sobre o App', "About")}
-        >
-          <Icon as={Info} size="md" className="text-zinc-900 mr-3" />
-          <Text className="text-[15px] font-semibold text-zinc-900 tracking-tight">Sobre o App</Text>
-        </TouchableOpacity>
-
-        <View className="h-[1px] bg-black/10 mx-3" />
-
-        {/* SAIR DA CONTA */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          className="py-3 px-5 w-full flex-row items-center justify-start bg-red-500/10"
-          onPress={() => {
-            onClose();
-            onSignOut();
-          }}
-        >
-          <Icon as={LogOut} size="md" className="text-red-600 mr-3" />
-          <Text className="text-[15px] font-semibold text-red-600 tracking-tight">Sair da Conta</Text>
-        </TouchableOpacity>
+        
       </BlurView>
 
-      {/* Setinha apontando para baixo */}
       <View
         className="w-0 h-0 border-solid border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white/75 -mt-[1px]"
       />
